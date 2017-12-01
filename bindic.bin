@@ -1,0 +1,5 @@
+#!/bin/bash
+
+/usr/share/bindic/bindic "$@" &
+
+exit 0
