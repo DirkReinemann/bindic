@@ -1,10 +1,9 @@
 CC=gcc
-CFLAGS=-g3 -std=c11 -Wall -Wextra -Werror `pkg-config --libs --cflags gtk+-3.0` -rdynamic
+CFLAGS=-g3 -std=c11 -Wall -Wextra -Werror `pkg-config --libs --cflags cairo-xlib`
 SOURCES=bindic.c
 BIN=bindic
 INSTALL_BIN=/usr/bin
-INSTALL_DIR=/usr/share/$(BIN)
-FILES=$(BIN).css $(BIN).glade $(BIN)
+FILES=$(BIN)
 
 all: compile
 

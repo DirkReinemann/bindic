@@ -1,48 +1,11 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include <gtk/gtk.h>
+#include <X11/Xlib.h>
+#include <X11/Xatom.h>
 
-const char *GLADE_FILE = "bindic.glade";
-const char *CSS_FILE = "bindic.css";
-const char *CONFIG_DIR = "/usr/share/bindic";
-const int TIME = 500;
-
-guint timeout = 0;
-
-gboolean on_window_destroy()
-{
-    g_source_remove(timeout);
-    gtk_main_quit();
-    return FALSE;
-}
-
-char *get_config_file(const char *filename)
-{
-    char *result = malloc(0 * sizeof(char));
-    size_t sfilename = strlen(filename);
-
-    if (access(filename, R_OK) != -1) {
-        result = (char *)realloc(result, (sfilename + 1) * sizeof(char));
-        strncpy(result, filename, sfilename);
-        result[sfilename] = '\0';
-    } else {
-        size_t sconfigdir = strlen(CONFIG_DIR);
-        size_t sfilepath = sconfigdir + sfilename + 1;
-        char filepath[sfilepath + 1];
-        strncpy(filepath, CONFIG_DIR, sconfigdir);
-        strncpy(filepath + sconfigdir, "/", 1);
-        strncpy(filepath + sconfigdir + 1, filename, sfilename);
-        filepath[sfilepath] = '\0';
-
-        if (access(filepath, R_OK) != -1) {
-            result = (char *)realloc(result, (sfilepath + 1) * sizeof(char));
-            strncpy(result, filepath, sfilepath);
-            result[sfilepath] = '\0';
-        }
-    }
-    return result;
-}
+const int WINDOW_HEIGHT = 50;
+const int WINDOW_WIDTH = 600;
 
 int main(int argc, char **argv)
 {
@@ -51,54 +14,59 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    char *glade_file = get_config_file(GLADE_FILE);
-    char *css_file = get_config_file(CSS_FILE);
+    int val = atol(argv[1]);
+    int max = atol(argv[2]);
 
-    if (glade_file[0] == '\0' || css_file[0] == '\0') {
-        printf("The glade file '%s' or the css file '%s' couldn't be found.\n", GLADE_FILE, CSS_FILE);
-        return 2;
-    }
-
-    gdouble value = (gdouble)atol(argv[1]);
-    gdouble max = (gdouble)atol(argv[2]);
-
-    if (value > max) {
-        printf("The actual value '%0.f' is bigger than the maximum value '%0.f'\n.", value, max);
+    if (val > max) {
+        printf("The actual value '%i' is bigger than the maximum value '%i'\n.", val, max);
         return 3;
     }
 
-    gchar text[10];
-    g_snprintf(text, 9, "%0.f", value);
+    Display *display = XOpenDisplay(NULL);
+    if (display == NULL) {
+        fprintf(stderr, "Cannot open display\n");
+        exit(1);
+    }
 
-    gtk_init(NULL, NULL);
+    int s = DefaultScreen(display);
+    Window window = XCreateSimpleWindow(display, RootWindow(display, s), 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, 1, BlackPixel(display, s), WhitePixel(display, s));
 
-    GtkBuilder *builder = gtk_builder_new();
-    gtk_builder_add_from_file(builder, glade_file, NULL);
-    gtk_builder_connect_signals(builder, NULL);
+    Atom type = XInternAtom(display, "_NET_WM_WINDOW_TYPE_SPLASH", False);
+    int ret = XChangeProperty(display, window, XInternAtom(display, "_NET_WM_WINDOW_TYPE", False), XA_ATOM, 32, PropModeReplace, (unsigned char *)&type, 1);
 
-    GtkCssProvider *provider = gtk_css_provider_get_default();
-    gtk_css_provider_load_from_path(provider, css_file, NULL);
-    gtk_style_context_add_provider_for_screen(gdk_screen_get_default(), GTK_STYLE_PROVIDER(provider),
-                                              GTK_STYLE_PROVIDER_PRIORITY_USER);
+    printf("%i\n", ret);
 
+    Atom state = XInternAtom(display, "_NET_WM_STATE_MODAL", False);
+    XChangeProperty(display, window, XInternAtom(display, "_NET_WM_STATE", False), XA_ATOM, 32, PropModeReplace, (unsigned char *)&state, 1);
 
-    GtkWindow *window = GTK_WINDOW(gtk_builder_get_object(builder, "window"));
-    GtkLevelBar *bar = GTK_LEVEL_BAR(gtk_builder_get_object(builder, "bar"));
-    GtkLabel *label = GTK_LABEL(gtk_builder_get_object(builder, "label"));
+    XSelectInput(display, window, ExposureMask | KeyPressMask);
+    XMapWindow(display, window);
 
-    gtk_level_bar_set_value(bar, value);
-    gtk_level_bar_set_max_value(bar, max);
-    gtk_label_set_text(label, text);
+    XFlush(display);
+    printf("window %i\n", (int)window);
 
-    timeout = g_timeout_add(TIME, on_window_destroy, NULL);
+    Colormap colormap = DefaultColormap(display, s);
 
-    gtk_widget_set_opacity(GTK_WIDGET(window), 0.1);
+    XColor xcolor;
+    xcolor.red = 64 * 256;
+    xcolor.green = 132 * 256;
+    xcolor.blue = 214 * 256;
+    xcolor.flags = DoRed | DoGreen | DoBlue;
+    XAllocColor(display, colormap, &xcolor);
 
-    free(glade_file);
-    free(css_file);
-    g_object_unref(builder);
-    gtk_widget_show(GTK_WIDGET(window));
-    gtk_main();
+    XEvent event;
+    GC gc = DefaultGC(display, s);
+    for (;;) {
+        XNextEvent(display, &event);
+        if (event.type == Expose) {
+            XSetForeground(display, gc, xcolor.pixel);
+            XFillRectangle(display, window, gc, 10, 10, 580, 30);
+        } else if (event.type == KeyPress) {
+            break;
+        }
+    }
 
+    XFreeColormap(display, colormap);
+    XCloseDisplay(display);
     return 0;
 }
