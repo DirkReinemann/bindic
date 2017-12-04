@@ -1,11 +1,23 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdint.h>
+#include <unistd.h>
 #include <X11/Xlib.h>
 #include <X11/Xatom.h>
+#include <X11/Xutil.h>
 
 const int WINDOW_HEIGHT = 50;
 const int WINDOW_WIDTH = 600;
+const int WAIT_MILLIS = 500;
+
+typedef struct Hints {
+    unsigned long flags;
+    unsigned long functions;
+    unsigned long decorations;
+    long          inputMode;
+    unsigned long status;
+} Hints;
 
 int main(int argc, char **argv)
 {
@@ -28,24 +40,32 @@ int main(int argc, char **argv)
         exit(1);
     }
 
-    int s = DefaultScreen(display);
-    Window window = XCreateSimpleWindow(display, RootWindow(display, s), 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, 1, BlackPixel(display, s), WhitePixel(display, s));
+    int screen = DefaultScreen(display);
+    Window window = XCreateSimpleWindow(display, RootWindow(display, screen), 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, 1, BlackPixel(display, screen), WhitePixel(display, screen));
 
-    Atom type = XInternAtom(display, "_NET_WM_WINDOW_TYPE_SPLASH", False);
-    int ret = XChangeProperty(display, window, XInternAtom(display, "_NET_WM_WINDOW_TYPE", False), XA_ATOM, 32, PropModeReplace, (unsigned char *)&type, 1);
-
-    printf("%i\n", ret);
-
+    // set modal window
     Atom state = XInternAtom(display, "_NET_WM_STATE_MODAL", False);
     XChangeProperty(display, window, XInternAtom(display, "_NET_WM_STATE", False), XA_ATOM, 32, PropModeReplace, (unsigned char *)&state, 1);
 
-    XSelectInput(display, window, ExposureMask | KeyPressMask);
+    // remove window decorations
+    Hints hints;
+    Atom property;
+    hints.flags = 2;
+    hints.decorations = 0;
+    property = XInternAtom(display, "_MOTIF_WM_HINTS", False);
+    XChangeProperty(display, window, property, property, 32, PropModeReplace, (unsigned char *)&hints, 5);
+
+    // remove input events
+    XWMHints *wmhints = XAllocWMHints();
+    wmhints->flags = InputHint;
+    wmhints->input = False;
+    XSetWMHints(display, window, wmhints);
+    XFree(wmhints);
+
+    XSelectInput(display, window, ExposureMask);
     XMapWindow(display, window);
 
-    XFlush(display);
-    printf("window %i\n", (int)window);
-
-    Colormap colormap = DefaultColormap(display, s);
+    Colormap colormap = DefaultColormap(display, screen);
 
     XColor xcolor;
     xcolor.red = 64 * 256;
@@ -55,13 +75,17 @@ int main(int argc, char **argv)
     XAllocColor(display, colormap, &xcolor);
 
     XEvent event;
-    GC gc = DefaultGC(display, s);
+    GC gc = DefaultGC(display, screen);
     for (;;) {
         XNextEvent(display, &event);
         if (event.type == Expose) {
+            int fill = (int)(WINDOW_WIDTH * val) / max;
+
             XSetForeground(display, gc, xcolor.pixel);
-            XFillRectangle(display, window, gc, 10, 10, 580, 30);
-        } else if (event.type == KeyPress) {
+            XFillRectangle(display, window, gc, 0, 0, fill, WINDOW_HEIGHT);
+            XFlush(display);
+
+            usleep(WAIT_MILLIS * 1000);
             break;
         }
     }
