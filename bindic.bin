@@ -1,5 +1,5 @@
 #!/bin/bash
 
-/usr/share/bindic/bindic "$@" &
+nohup /usr/share/bindic/bindic "$@" > /dev/null 2>&1 &
 
 exit 0
